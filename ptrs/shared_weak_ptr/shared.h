@@ -3,100 +3,124 @@
 #include "sw_fwd.h"  // Forward declaration
 
 #include <cstddef>  // std::nullptr_t
+#include <new>
+#include <stdexcept>
 #include <type_traits>
 #include <locale>
 
 class BaseControlBlock {
 public:
-    BaseControlBlock(size_t strong_cnt = 0, size_t weak_cnt = 0);
-    void IncStrong();
-    void DecStrong();
+    BaseControlBlock(size_t strong_cnt = 0, size_t weak_cnt = 0)
+        : strong_cnt_(strong_cnt), weak_cnt_(weak_cnt) {
+    }
+    void IncStrong() {
+        ++strong_cnt_;
+    }
+    void DecStrong() {
+        --strong_cnt_;
+        if (strong_cnt_ == 0 && weak_cnt_ == 0) {
+            delete this;
+        } else if (strong_cnt_ == 0) {
+            this->Destroy();
+        }
+    }
 
-    void IncWeak();
-    void DecWeak();
+    void IncWeak() {
+        ++weak_cnt_;
+    }
+    void DecWeak() {
+        --weak_cnt_;
+        if (strong_cnt_ == 0 && weak_cnt_ == 0) {
+            delete this;
+        }
+    }
 
-    size_t GetStrongCnt() const;
-    size_t GetWeakCnt() const;
+    size_t GetStrongCnt() const {
+        return strong_cnt_;
+    }
+    size_t GetWeakCnt() const {
+        return weak_cnt_;
+    }
 
     virtual ~BaseControlBlock() = default;
+    virtual void Destroy() {
+    }
 
 private:
     size_t strong_cnt_;
     size_t weak_cnt_;
 };
 
-BaseControlBlock::BaseControlBlock(size_t strong_cnt, size_t weak_cnt)
-    : strong_cnt_(strong_cnt), weak_cnt_(weak_cnt) {
-}
-
-void BaseControlBlock::IncStrong() {
-    ++strong_cnt_;
-}
-void BaseControlBlock::DecStrong() {
-    --strong_cnt_;
-    if (strong_cnt_ == 0) {
-        delete this;
-    }
-}
-
-void BaseControlBlock::IncWeak() {
-    ++weak_cnt_;
-}
-void BaseControlBlock::DecWeak() {
-    --weak_cnt_;
-}
-
-size_t BaseControlBlock::GetStrongCnt() const {
-    return strong_cnt_;
-}
-size_t BaseControlBlock::GetWeakCnt() const {
-    return weak_cnt_;
-}
-
 template <typename T>
 class PointerControlBlock : public BaseControlBlock {
 public:
-    PointerControlBlock(T* ptr);
+    PointerControlBlock(T* ptr) : BaseControlBlock(1, 0), ptr_(ptr) {
+    }
 
-    ~PointerControlBlock();
+    ~PointerControlBlock() {
+        delete ptr_;
+        ptr_ = nullptr;
+    }
+
+    void Destroy() {
+        delete ptr_;
+        ptr_ = nullptr;
+    }
 
 private:
     T* ptr_;
 };
 
 template <typename T>
-PointerControlBlock<T>::PointerControlBlock(T* ptr) : BaseControlBlock(1, 0), ptr_(ptr) {
-}
+class PointerControlBlock<T[]> : public BaseControlBlock {
+public:
+    PointerControlBlock(T* ptr) : BaseControlBlock(1, 0), ptr_(ptr) {
+    }
 
-template <typename T>
-PointerControlBlock<T>::~PointerControlBlock() {
-    delete ptr_;
-}
+    ~PointerControlBlock() {
+        delete[] ptr_;
+        ptr_ = nullptr;
+    }
+
+    void Destroy() {
+        delete[] ptr_;
+        ptr_ = nullptr;
+    }
+
+private:
+    T* ptr_;
+};
 
 template <typename T>
 class ObjectControlBlock : public BaseControlBlock {
 public:
     template <typename... Args>
-    ObjectControlBlock(Args&&... args)
-        : BaseControlBlock(1, 0), object_(T{std::forward<Args>(args)...}) {
+    ObjectControlBlock(Args&&... args) : BaseControlBlock(1, 0), is_destroyed_(false) {
+        ::new (&stor_) T(std::forward<Args>(args)...);
     }
 
-    T* GetObject();
+    T* GetObject() {
+        return std::launder(reinterpret_cast<T*>(&stor_));
+    }
 
-    ~ObjectControlBlock();
+    ~ObjectControlBlock() {
+        if (!is_destroyed_) {
+            std::destroy_at(std::launder(reinterpret_cast<T*>(&stor_)));
+            is_destroyed_ = true;
+        }
+    }
+
+    void Destroy() {
+        if (!is_destroyed_) {
+            std::destroy_at(std::launder(reinterpret_cast<T*>(&stor_)));
+            is_destroyed_ = true;
+        }
+    }
 
 private:
-    T object_;
+    bool is_destroyed_;
+    std::aligned_storage_t<sizeof(T), alignof(T)> stor_;
 };
-
-template <typename T>
-T* ObjectControlBlock<T>::GetObject() {
-    return &object_;
-}
-
-template <typename T>
-ObjectControlBlock<T>::~ObjectControlBlock() {
-}
 
 // https://en.cppreference.com/w/cpp/memory/shared_ptr
 template <typename T>
@@ -143,7 +167,7 @@ public:
 
     // Promote `WeakPtr`
     // #11 from https://en.cppreference.com/w/cpp/memory/shared_ptr/shared_ptr
-    // explicit SharedPtr(const WeakPtr<T>& other);
+    explicit SharedPtr(const WeakPtr<T>& other);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // `operator=`-s
@@ -208,6 +232,9 @@ public:
 private:
     template <typename T2>
     friend class SharedPtr;
+
+    template <typename T2>
+    friend class WeakPtr;
 
     BaseControlBlock* block_;
     T* object_;
@@ -334,6 +361,18 @@ template <typename T, typename... Args>
 SharedPtr<T> MakeShared(Args&&... args) {
     ObjectControlBlock<T>* tmp = new ObjectControlBlock<T>(std::forward<Args>(args)...);
     return SharedPtr<T>(tmp, tmp->GetObject());
+}
+
+template <typename T>
+SharedPtr<T>::SharedPtr(const WeakPtr<T>& other) {
+    if (other.Expired()) {
+        throw BadWeakPtr();
+    }
+    block_ = other.block_;
+    object_ = other.object_;
+    if (block_) {
+        block_->IncStrong();
+    }
 }
 
 // Look for usage examples in tests
