@@ -6,7 +6,6 @@
 #include <cstddef>
 #include <type_traits>
 
-// https://en.cppreference.com/w/cpp/memory/weak_ptr
 template <typename T>
 class WeakPtr {
 public:
