@@ -374,14 +374,3 @@ SharedPtr<T>::SharedPtr(const WeakPtr<T>& other) {
         block_->IncStrong();
     }
 }
-
-// Look for usage examples in tests
-// template <typename T>
-// class EnableSharedFromThis {
-// public:
-//     SharedPtr<T> SharedFromThis();
-//     SharedPtr<const T> SharedFromThis() const;
-
-//     WeakPtr<T> WeakFromThis() noexcept;
-//     WeakPtr<const T> WeakFromThis() const noexcept;
-// };
