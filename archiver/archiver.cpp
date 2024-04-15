@@ -2,7 +2,7 @@
 // NOLINTBEGIN
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::cerr << "too few arguments";
+        std::cerr << "too few arguments" << std::endl;
         return 1;
     }
     // I'll try change parsing
@@ -10,14 +10,14 @@ int main(int argc, char** argv) {
         std::cout << "Типо архиватор(нет    :(    )";
     } else if (argv[1][1] == 'd') {
         if (argc < 3) {
-            std::cerr << "too few arguments";
+            std::cerr << "too few arguments" << std::endl;
             return 1;
         }
         Encoder encoder(argv[2]);
         encoder.UnArchive();
-    } else (argv[1][1] == 'c') {
+    } else if (argv[1][1] == 'c') {
         if (argc < 3) {
-            std::cerr << "too few arguments";
+            std::cerr << "too few arguments" << std::endl;
             return 1;
         }
         std::vector<std::string> input_files;
