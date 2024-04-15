@@ -15,7 +15,7 @@ int main(int argc, char** argv) {
         }
         Encoder encoder(argv[2]);
         encoder.UnArchive();
-    } else if (argv[1][1] == 'c') {
+    } else if (argv[1][1] == 'a') {
         if (argc < 3) {
             std::cerr << "too few arguments" << std::endl;
             return 1;
@@ -27,7 +27,7 @@ int main(int argc, char** argv) {
         Coder coder(input_files, argv[2]);
         coder.Archive();
     } else {
-        std::cerr << "unknown option: " << argv[2] << std::endl;
+        std::cerr << "unknown option: " << argv[1] << std::endl;
         return 1;
     }
     return 0;
