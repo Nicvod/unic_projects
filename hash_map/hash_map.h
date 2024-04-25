@@ -379,7 +379,4 @@ private:
     HashElement* begin_; // first undead element
     HashElement* end_; // last undead element
     size_t size_;
-
-    //friend class HashMap::iterator;
-    //friend class HashMap::const_iterator;
 };
